@@ -406,28 +406,87 @@ ProcArrayEndTransaction(PGPROC *proc, TransactionId latestXid)
 		 */
 		Assert(TransactionIdIsValid(allPgXact[proc->pgprocno].xid));
 
-		debug_tag = LWD_ProcEnd;
-		LWLockAcquire(ProcArrayLock, LW_EXCLUSIVE);
-		debug_tag = LWD_NULL;
+		proc->procToEnd = true;
 
-		pgxact->xid = InvalidTransactionId;
-		proc->lxid = InvalidLocalTransactionId;
-		pgxact->xmin = InvalidTransactionId;
-		/* must be cleared with xid/xmin: */
-		pgxact->vacuumFlags &= ~PROC_VACUUM_STATE_MASK;
-		pgxact->delayChkpt = false;		/* be sure this is cleared in abort */
-		proc->recoveryConflictPending = false;
+		for (;;)
+		{
 
-		/* Clear the subtransaction-XID cache too while holding the lock */
-		pgxact->nxids = 0;
-		pgxact->overflowed = false;
+			//debug_tag = LWD_ProcEnd;
+			//LWLockAcquire(ProcArrayLock, LW_EXCLUSIVE);
+			//debug_tag = LWD_NULL;
 
-		/* Also advance global latestCompletedXid while holding the lock */
-		if (TransactionIdPrecedes(ShmemVariableCache->latestCompletedXid,
-								  latestXid))
-			ShmemVariableCache->latestCompletedXid = latestXid;
+			volatile bool procEnded = proc->procToEnd;
+			if (!procEnded)
+				break;
 
-		LWLockRelease(ProcArrayLock);
+			if (!LWLockAcquireOrWait(ProcArrayLock, LW_EXCLUSIVE))
+			{
+				/*
+				 * The lock is now free, but we didn't acquire it yet. Before we
+				 * do, loop back to check if someone else flushed the record for
+				 * us already.
+				 */
+				continue;
+			}
+
+			{
+				ProcArrayStruct *arrayP = procArray;
+				int numProcs = arrayP->numProcs;
+				int *pgprocnos = arrayP->pgprocnos;
+				int index;
+
+				for (index = 0; index < numProcs; index++)
+				{
+
+					int			pgprocno = pgprocnos[index];
+					volatile PGPROC *proc =	&allProcs[pgprocno];
+					volatile PGXACT *pgxact = &allPgXact[pgprocno];
+					TransactionId xid;
+
+					if (!proc->procToEnd)
+						continue;
+
+					pgxact->xid = InvalidTransactionId;
+					proc->lxid = InvalidLocalTransactionId;
+					pgxact->xmin = InvalidTransactionId;
+					/* must be cleared with xid/xmin: */
+					pgxact->vacuumFlags &= ~PROC_VACUUM_STATE_MASK;
+					pgxact->delayChkpt = false;		/* be sure this is cleared in abort */
+					proc->recoveryConflictPending = false;
+
+					/* Clear the subtransaction-XID cache too while holding the lock */
+					pgxact->nxids = 0;
+					pgxact->overflowed = false;
+
+					/* Also advance global latestCompletedXid while holding the lock */
+					if (TransactionIdPrecedes(ShmemVariableCache->latestCompletedXid,
+											  latestXid))
+						ShmemVariableCache->latestCompletedXid = latestXid;
+					proc->procToEnd = false;
+				}
+				LWLockRelease(ProcArrayLock);
+				break;
+			}
+	#if 0
+			pgxact->xid = InvalidTransactionId;
+			proc->lxid = InvalidLocalTransactionId;
+			pgxact->xmin = InvalidTransactionId;
+			/* must be cleared with xid/xmin: */
+			pgxact->vacuumFlags &= ~PROC_VACUUM_STATE_MASK;
+			pgxact->delayChkpt = false;		/* be sure this is cleared in abort */
+			proc->recoveryConflictPending = false;
+
+			/* Clear the subtransaction-XID cache too while holding the lock */
+			pgxact->nxids = 0;
+			pgxact->overflowed = false;
+
+			/* Also advance global latestCompletedXid while holding the lock */
+			if (TransactionIdPrecedes(ShmemVariableCache->latestCompletedXid,
+									  latestXid))
+				ShmemVariableCache->latestCompletedXid = latestXid;
+			LWLockRelease(ProcArrayLock);
+	#endif
+		}
 	}
 	else
 	{

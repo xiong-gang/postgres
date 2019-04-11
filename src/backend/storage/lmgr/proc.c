@@ -375,6 +375,7 @@ InitProcess(void)
 	MyProc->lwWaitLink = NULL;
 	MyProc->waitLock = NULL;
 	MyProc->waitProcLock = NULL;
+	MyProc->procToEnd = false;
 #ifdef USE_ASSERT_CHECKING
 	if (assert_enabled)
 	{
