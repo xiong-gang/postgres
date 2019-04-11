@@ -169,7 +169,9 @@ typedef enum LWDebugTag
 	LWD_NULL,
 	LWD_ProcAdd,
 	LWD_ProcRemove,
-	LWD_ProcEnd
+	LWD_ProcEnd,
+	LWD_Wait,
+	LWD_Var
 
 }LWDebugTag;
 
