@@ -618,7 +618,7 @@ LWLockAcquireCommon(LWLock *l, LWLockMode mode, uint64 *valptr, uint64 val)
 		lwstats->block_count++;
 #endif
 
-		TRACE_POSTGRESQL_LWLOCK_WAIT_START(T_NAME(l), T_ID(l), mode);
+		TRACE_POSTGRESQL_LWLOCK_WAIT_START(T_NAME(l), T_ID(l), mode, debug_tag);
 
 		for (;;)
 		{
@@ -629,7 +629,7 @@ LWLockAcquireCommon(LWLock *l, LWLockMode mode, uint64 *valptr, uint64 val)
 			extraWaits++;
 		}
 
-		TRACE_POSTGRESQL_LWLOCK_WAIT_DONE(T_NAME(l), T_ID(l), mode);
+		TRACE_POSTGRESQL_LWLOCK_WAIT_DONE(T_NAME(l), T_ID(l), mode, debug_tag);
 
 		LOG_LWDEBUG("LWLockAcquire", T_NAME(l), T_ID(l), "awakened");
 
